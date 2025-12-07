@@ -35,18 +35,35 @@ app.use(express.static(__dirname + '/static'));
 const client = new MongoClient(process.env.MONGO_URI);
 let db;
 
-async function connectToDB() {
+async function startServer() {
   try {
     await client.connect();
     db = client.db(process.env.MONGO_DB);
-    console.log("Connected to MongoDB Atlas", process.env.MONGO_DB);
+    console.log("Connected to MongoDB Atlas:", process.env.MONGO_DB);
+
+    // Start Express server AFTER DB is connected
+    app.listen(port, () => {
+      console.log(`Server running on port ${port}`);
+    });
   } catch (err) {
-    console.error("MongoDB Connection Error:", err);
+    console.error("Failed to connect to MongoDB:", err);
   }
 }
 
-connectToDB();
-console.log("db value:", db);
+startServer();
+
+// async function connectToDB() {
+//   try {
+//     await client.connect();
+//     db = client.db(process.env.MONGO_DB);
+//     console.log("Connected to MongoDB Atlas", process.env.MONGO_DB);
+//   } catch (err) {
+//     console.error("MongoDB Connection Error:", err);
+//   }
+// }
+
+// connectToDB();
+// console.log("db value:", db);
 
 
 // ------------------------------
@@ -73,13 +90,16 @@ app.post('/api/log-login', async (req, res) => {
 
 // Retrieve login history
 app.get('/api/logins', async (req, res) => {
+  if (!db) {
+	return res.status(500).json({ error: "Database not connected" });
+  }
   try {
-    const data = await db.collection("logins")
+    const logins = await db.collection("logins")
       .find()
       .sort({ timestamp: -1 })
       .toArray();
 
-    res.json(data);
+    res.json(logins);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Could not load login history" });
