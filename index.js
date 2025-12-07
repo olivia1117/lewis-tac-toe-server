@@ -46,6 +46,8 @@ async function connectToDB() {
 }
 
 connectToDB();
+console.log("db value:", db);
+
 
 // ------------------------------
 // API ENDPOINTS
