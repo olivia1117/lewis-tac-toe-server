@@ -13,4 +13,3 @@ cd [[your-repository-url]]
 npm install express
 npm start
 
-test
