@@ -39,7 +39,7 @@ async function connectToDB() {
   try {
     await client.connect();
     db = client.db(process.env.MONGO_DB);
-    console.log("Connected to MongoDB Atlas");
+    console.log("Connected to MongoDB Atlas", process.env.MONGO_DB);
   } catch (err) {
     console.error("MongoDB Connection Error:", err);
   }
