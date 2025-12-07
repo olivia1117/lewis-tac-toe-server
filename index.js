@@ -20,8 +20,10 @@ app.use(express.json());
 
 // Enable CORS for all origins (good for local testing)
 app.use(cors({
-  origin: '*',
+//   origin: '*', //use this for testing locally
+  origin: 'https://lewistactoe.lewisunivcs.com', // your React app domain
   methods: ['GET', 'POST']
+  
 }));
 
 // Serve static files
