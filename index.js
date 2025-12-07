@@ -22,8 +22,8 @@ app.use(express.json());
 app.use(cors({
 //   origin: '*', //use this for testing locally
   origin: 'https://lewistactoe.lewisunivcs.com', // your React app domain
-  methods: ['GET', 'POST']
-  
+  methods: ['GET', 'POST'],
+  credentials: true,
 }));
 
 // Serve static files
