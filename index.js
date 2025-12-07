@@ -1,160 +1,199 @@
-const express = require('express')
-app = express()
+const express = require('express');
+const cors = require("cors");
+const url = require('url');
+const dt = require('./date-time');
+require('dotenv').config();
 
-const cors = require("cors")
+const { MongoClient } = require('mongodb');
 
-var url = require('url');
-var dt = require('./date-time');
+const app = express();
+const port = process.env.PORT || 3000;
+const majorVersion = 1;
+const minorVersion = 3;
 
-const port = process.env.PORT || 3000
-const majorVersion = 1
-const minorVersion = 3
+// ------------------------------
+// MIDDLEWARE
+// ------------------------------
 
-// Use Express to publish static HTML, CSS, and JavaScript files that run in the browser. 
-app.use(express.static(__dirname + '/static'))
-app.use(cors({ origin: '*' }))
+// Parse JSON globally
+app.use(express.json());
 
-// The app.get functions below are being processed in Node.js running on the server.
-// Implement a custom About page.
-app.get('/about', (request, response) => {
-	console.log('Calling "/about" on the Node.js server.')
-	response.type('text/plain')
-	response.send('About Node.js on Azure Template.')
-})
+// Enable CORS for all origins (good for local testing)
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST']
+}));
 
-app.get('/version', (request, response) => {
-	console.log('Calling "/version" on the Node.js server.')
-	response.type('text/plain')
-	response.send('Version: '+majorVersion+'.'+minorVersion)
-})
+// Serve static files
+app.use(express.static(__dirname + '/static'));
 
-app.get('/api/ping', (request, response) => {
-	console.log('Calling "/api/ping"')
-	response.type('text/plain')
-	response.send('ping response')
-})
+// ------------------------------
+// MONGO DB SETUP
+// ------------------------------
+const client = new MongoClient(process.env.MONGO_URI);
+let db;
 
-// Return the value of 2 plus 2.
-app.get('/2plus2', (request, response) => {
-	console.log('Calling "/2plus2" on the Node.js server.')
-	response.type('text/plain')
-	response.send('4')
-})
-
-// Add x and y which are both passed in on the URL. 
-app.get('/add-two-integers', (request, response) => {
-	console.log('Calling "/add-two-integers" on the Node.js server.')
-	var inputs = url.parse(request.url, true).query
-	let x = parseInt(inputs.x)
-	let y = parseInt(inputs.y)
-	let sum = x + y
-	response.type('text/plain')
-	response.send(sum.toString())
-})
-
-// Template for calculating BMI using height in feet/inches and weight in pounds.
-app.get('/calculate-bmi', (request, response) => {
-	console.log('Calling "/calculate-bmi" on the Node.js server.')
-	var inputs = url.parse(request.url, true).query
-	const heightFeet = parseInt(inputs.feet)
-	const heightInches = parseInt(inputs.inches)
-	const weight = parseInt(inputs.lbs)
-
-	console.log('Height:' + heightFeet + '\'' + heightInches + '\"')
-	console.log('Weight:' + weight + ' lbs.')
-
-	// Todo: Implement unit conversions and BMI calculations.
-	// Todo: Return BMI instead of Todo message.
-
-	response.type('text/plain')
-	response.send('Todo: Implement "/calculate-bmi"')
-})
-
-// Test a variety of functions.
-app.get('/test', (request, response) => {
-    // Write the request to the log. 
-    console.log(request);
-
-    // Return HTML.
-    response.writeHead(200, {'Content-Type': 'text/html'});
-    response.write('<h3>Testing Function</h3>')
-
-    // Access function from a separate JavaScript module.
-    response.write("The date and time are currently: " + dt.myDateTime() + "<br><br>");
-
-    // Show the full url from the request. 
-    response.write("req.url="+request.url+"<br><br>");
-
-    // Suggest adding something tl the url so that we can parse it. 
-    response.write("Consider adding '/test?year=2017&month=July' to the URL.<br><br>");
-    
-	// Parse the query string for values that are being passed on the URL.
-	var q = url.parse(request.url, true).query;
-    var txt = q.year + " " + q.month;
-    response.write("txt="+txt);
-
-    // Close the response
-    response.end('<h3>The End.</h3>');
-})
-
-// Return Batman as JSON.
-const batMan = {
-	"firstName":"Bruce",
-	"lastName":"Wayne",
-	"preferredName":"Batman",
-	"email":"darkknight@lewisu.edu",
-	"phoneNumber":"800-bat-mann",
-	"city":"Gotham",
-	"state":"NJ",
-	"zip":"07101",
-	"lat":"40.73",
-	"lng":"-74.17",
-	"favoriteHobby":"Flying",
-	"class":"cpsc-24700-001",
-	"room":"AS-104-A",
-	"startTime":"2 PM CT",
-	"seatNumber":"",
-	"inPerson":[
-		"Monday",
-		"Wednesday"
-	],
-	"virtual":[
-		"Friday"
-	]
+async function connectToDB() {
+  try {
+    await client.connect();
+    db = client.db(process.env.MONGO_DB);
+    console.log("Connected to MongoDB Atlas");
+  } catch (err) {
+    console.error("MongoDB Connection Error:", err);
+  }
 }
 
-app.get('/batman', (request, response) => {
-	console.log('Calling "/batman" on the Node.js server.')
-	response.type('application/json')
-	response.send(JSON.stringify(batMan))
-})
+connectToDB();
 
-// Load your JSON data
+// ------------------------------
+// API ENDPOINTS
+// ------------------------------
+
+// Log login attempts
+app.post('/api/log-login', async (req, res) => {
+  try {
+    const { email, name, timestamp } = req.body;
+
+    await db.collection("logins").insertOne({
+      email,
+      name,
+      timestamp
+    });
+
+    res.json({ status: "ok" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Database insert failed" });
+  }
+});
+
+// Retrieve login history
+app.get('/api/logins', async (req, res) => {
+  try {
+    const data = await db.collection("logins")
+      .find()
+      .sort({ timestamp: -1 })
+      .toArray();
+
+    res.json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not load login history" });
+  }
+});
+
+// Other endpoints remain the same
+app.get('/about', (req, res) => {
+  console.log('Calling "/about" on the Node.js server.');
+  res.type('text/plain');
+  res.send('About Node.js on Azure Template.');
+});
+
+app.get('/version', (req, res) => {
+  console.log('Calling "/version" on the Node.js server.');
+  res.type('text/plain');
+  res.send('Version: ' + majorVersion + '.' + minorVersion);
+});
+
+app.get('/api/ping', (req, res) => {
+  console.log('Calling "/api/ping"');
+  res.type('text/plain');
+  res.send('ping response');
+});
+
+app.get('/2plus2', (req, res) => {
+  console.log('Calling "/2plus2" on the Node.js server.');
+  res.type('text/plain');
+  res.send('4');
+});
+
+app.get('/add-two-integers', (req, res) => {
+  console.log('Calling "/add-two-integers" on the Node.js server.');
+  const inputs = url.parse(req.url, true).query;
+  const x = parseInt(inputs.x);
+  const y = parseInt(inputs.y);
+  const sum = x + y;
+  res.type('text/plain');
+  res.send(sum.toString());
+});
+
+app.get('/calculate-bmi', (req, res) => {
+  console.log('Calling "/calculate-bmi" on the Node.js server.');
+  const inputs = url.parse(req.url, true).query;
+  const heightFeet = parseInt(inputs.feet);
+  const heightInches = parseInt(inputs.inches);
+  const weight = parseInt(inputs.lbs);
+
+  console.log('Height:' + heightFeet + '\'' + heightInches + '\"');
+  console.log('Weight:' + weight + ' lbs.');
+
+  res.type('text/plain');
+  res.send('Todo: Implement "/calculate-bmi"');
+});
+
+app.get('/test', (req, res) => {
+  console.log(req);
+  res.writeHead(200, {'Content-Type': 'text/html'});
+  res.write('<h3>Testing Function</h3>');
+  res.write("The date and time are currently: " + dt.myDateTime() + "<br><br>");
+  res.write("req.url=" + req.url + "<br><br>");
+  res.write("Consider adding '/test?year=2017&month=July' to the URL.<br><br>");
+  const q = url.parse(req.url, true).query;
+  const txt = q.year + " " + q.month;
+  res.write("txt=" + txt);
+  res.end('<h3>The End.</h3>');
+});
+
+const batMan = {
+  "firstName":"Bruce",
+  "lastName":"Wayne",
+  "preferredName":"Batman",
+  "email":"darkknight@lewisu.edu",
+  "phoneNumber":"800-bat-mann",
+  "city":"Gotham",
+  "state":"NJ",
+  "zip":"07101",
+  "lat":"40.73",
+  "lng":"-74.17",
+  "favoriteHobby":"Flying",
+  "class":"cpsc-24700-001",
+  "room":"AS-104-A",
+  "startTime":"2 PM CT",
+  "seatNumber":"",
+  "inPerson":["Monday","Wednesday"],
+  "virtual":["Friday"]
+};
+
+app.get('/batman', (req, res) => {
+  console.log('Calling "/batman" on the Node.js server.');
+  res.type('application/json');
+  res.send(JSON.stringify(batMan));
+});
+
 const favoritePlaces = require('./FavoritePlaces.json');
-
-// Create a route that serves the JSON data
 app.get('/api/favorite-places', (req, res) => {
   res.json(favoritePlaces);
 });
 
+// ------------------------------
+// ERROR HANDLING
+// ------------------------------
+app.use((req, res) => {
+  res.type('text/plain');
+  res.status(404);
+  res.send('404 - Not Found');
+});
 
+app.use((err, req, res, next) => {
+  console.error(err.message);
+  res.type('text/plain');
+  res.status(500);
+  res.send('500 - Server Error');
+});
 
-// Custom 404 page.
-app.use((request, response) => {
-  response.type('text/plain')
-  response.status(404)
-  response.send('404 - Not Found')
-})
-
-// Custom 500 page.
-app.use((err, request, response, next) => {
-  console.error(err.message)
-  response.type('text/plain')
-  response.status(500)
-  response.send('500 - Server Error')
-})
-
+// ------------------------------
+// START SERVER
+// ------------------------------
 app.listen(port, () => console.log(
-  `Express started at \"http://localhost:${port}\"\n` +
-  `press Ctrl-C to terminate.`)
-)
+  `Express started at http://localhost:${port}\npress Ctrl-C to terminate.`)
+);
