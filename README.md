@@ -12,3 +12,5 @@ git clone [[your-repository-url]]
 cd [[your-repository-url]]
 npm install express
 npm start
+
+test
