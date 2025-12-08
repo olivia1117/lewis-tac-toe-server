@@ -11,6 +11,12 @@ const port = process.env.PORT || 3000;
 const majorVersion = 1;
 const minorVersion = 3;
 
+// For file uploads 
+const multer = require('multer');
+const { GridFSBucket } = require('mongodb');
+const { Readable } = require('stream');
+
+
 // ------------------------------
 // MIDDLEWARE
 // ------------------------------
@@ -29,17 +35,29 @@ app.use(cors({
 // Serve static files
 app.use(express.static(__dirname + '/static'));
 
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
+
+
 // ------------------------------
 // MONGO DB SETUP
 // ------------------------------
 const client = new MongoClient(process.env.MONGO_URI);
 let db;
+// let filesDb;
+let gfsBucket;
 
 async function startServer() {
   try {
     await client.connect();
     db = client.db(process.env.MONGO_DB);
-    console.log("Connected to MongoDB Atlas:", process.env.MONGO_DB);
+    console.log("Connected to MongoDB Atlas (login DB):", process.env.MONGO_DB);
+
+	// filesDb = client.db(process.env.FILES_DB); // separate files database
+	// console.log("Connected to MongoDB Atlas (files DB):", process.env.FILES_DB);
+
+	//Initialize GridFS bucket for file storage
+    gfsBucket = new GridFSBucket(db, { bucketName: "fs" });
 
     // Start Express server AFTER DB is connected
     app.listen(port, () => {
@@ -52,23 +70,6 @@ async function startServer() {
 
 startServer();
 
-// async function connectToDB() {
-//   try {
-//     await client.connect();
-//     db = client.db(process.env.MONGO_DB);
-//     console.log("Connected to MongoDB Atlas", process.env.MONGO_DB);
-//   } catch (err) {
-//     console.error("MongoDB Connection Error:", err);
-//   }
-// }
-
-// connectToDB();
-// console.log("db value:", db);
-
-
-// ------------------------------
-// API ENDPOINTS
-// ------------------------------
 
 // Log login attempts
 app.post('/api/log-login', async (req, res) => {
@@ -105,6 +106,106 @@ app.get('/api/logins', async (req, res) => {
     res.status(500).json({ error: "Could not load login history" });
   }
 });
+
+// Upload a file
+app.post('/api/upload', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+  const readableFile = new Readable();
+  readableFile.push(req.file.buffer);
+  readableFile.push(null);
+
+  const uploadStream = gfsBucket.openUploadStream(req.file.originalname, {
+    metadata: { uploadedBy: req.body.email || "anonymous" }
+  });
+
+  readableFile.pipe(uploadStream)
+    .on('error', (err) => {
+      console.error(err);
+      res.status(500).json({ error: "Upload failed" });
+    })
+    .on('finish', () => {
+      res.json({ message: "File uploaded successfully", fileId: uploadStream.id });
+    });
+});
+
+// // Upload a file
+// app.post('/api/upload', upload.single('file'), async (req, res) => {
+//   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+//   const readableFile = new Readable();
+//   readableFile.push(req.file.buffer);
+//   readableFile.push(null);
+
+//   // Use gfsBucket from the separate files DB
+//   const uploadStream = gfsBucket.openUploadStream(req.file.originalname, {
+//     metadata: { uploadedBy: req.body.email || "anonymous" }
+//   });
+
+//   readableFile.pipe(uploadStream)
+//     .on('error', (err) => {
+//       console.error(err);
+//       res.status(500).json({ error: "Upload failed" });
+//     })
+//     .on('finish', () => {
+//       res.json({ message: "File uploaded successfully", fileId: uploadStream.id });
+//     });
+// });
+
+
+
+// Download a file by filename
+app.get('/api/files/:filename', async (req, res) => {
+  try {
+    const file = await db.collection("fs.files").findOne({ filename: req.params.filename });
+    if (!file) return res.status(404).json({ error: "File not found" });
+
+    res.setHeader("Content-Disposition", `attachment; filename="${file.filename}"`);
+    const downloadStream = gfsBucket.openDownloadStreamByName(req.params.filename);
+    downloadStream.pipe(res);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to download file" });
+  }
+});
+
+// // Download a file by filename
+// app.get('/api/files/:filename', async (req, res) => {
+//   try {
+//     const file = await filesDb.collection("fs.files").findOne({ filename: req.params.filename });
+//     if (!file) return res.status(404).json({ error: "File not found" });
+
+//     res.setHeader("Content-Disposition", `attachment; filename="${file.filename}"`);
+//     const downloadStream = gfsBucket.openDownloadStreamByName(req.params.filename);
+//     downloadStream.pipe(res);
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ error: "Failed to download file" });
+//   }
+// });
+
+
+// List all files
+app.get('/api/files', async (req, res) => {
+  try {
+    const files = await db.collection("fs.files").find().toArray();
+    res.json(files);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to list files" });
+  }
+});
+
+// // List all files
+// app.get('/api/files', async (req, res) => {
+//   try {
+//     const files = await filesDb.collection("fs.files").find().toArray();
+//     res.json(files);
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ error: "Failed to list files" });
+//   }
+// });
 
 // Other endpoints remain the same
 app.get('/about', (req, res) => {
