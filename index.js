@@ -21,7 +21,7 @@ app.use(express.json());
 // Enable CORS for all origins (good for local testing)
 app.use(cors({
 //   origin: '*', //use this for testing locally
-  origin: ['https://lewistactoe.lewisunivcs.com'], // your React app domain
+  origin: ['https://lewistactoe.lewisunivcs.com', 'http://localhost:3000', 'http://localhost:3001'], // your React app domain
   methods: ['GET', 'POST'],
   credentials: true,
 }));
@@ -215,9 +215,3 @@ app.use((err, req, res, next) => {
   res.send('500 - Server Error');
 });
 
-// ------------------------------
-// START SERVER
-// ------------------------------
-app.listen(port, () => console.log(
-  `Express started at http://localhost:${port}\npress Ctrl-C to terminate.`)
-);
